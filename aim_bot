@@ -1,0 +1,268 @@
+-- esp_and_aimassist.lua
+-- LocalScript: StarterPlayer -> StarterPlayerScripts
+-- Safe ESP (client-only) + single-player-only gentle aim‑assist (NO auto-fire).
+-- Aim-assist will refuse to run if other human players are present.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ================= CONFIG =================
+local TOGGLE_ESP_KEY = Enum.KeyCode.RightShift
+local TOGGLE_AIM_KEY = Enum.KeyCode.RightAlt
+
+local ESP_UPDATE_INTERVAL = 0.12
+local SHOW_TEAMMATES = false
+
+-- Aim-assist config (gentle, for single-player testing only)
+local ASSIST_MAX_ANGLE = 15            -- degrees: only assist if target within this angle of camera forward
+local ASSIST_STRENGTH = 0.16          -- 0..1 lerp strength per frame (smaller == gentler)
+local ASSIST_RANGE = 200              -- studs: max distance to consider targets
+local AIMCHECK_PLAYER_LIMIT = 1       -- if Players:GetPlayers() > this, aim-assist refuses to run
+
+-- ================= STATE =================
+local espEnabled = true
+local aimEnabled = false
+local tracked = {} -- char model -> entry
+
+-- ============= HELPERS ================
+local function isHumanPlayer(instance)
+	if not instance then return false end
+	local pl = Players:GetPlayerFromCharacter(instance)
+	return pl ~= nil
+end
+
+local function createOrUpdateESPForCharacter(sourceName, char, displayName)
+	if not char or not char.Parent then return end
+	if char == LocalPlayer.Character then return end
+
+	local head = char:FindFirstChild("Head")
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not head or not humanoid then return end
+
+	local key = char
+	local entry = tracked[key]
+	if entry then
+		entry.humanoid = humanoid
+		entry.head = head
+		entry.sourceName = sourceName
+		return
+	end
+
+	-- Highlight (client-side)
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "LocalESP_Highlight"
+	highlight.Adornee = char
+	highlight.FillTransparency = 0.78
+	highlight.OutlineTransparency = 0
+	highlight.FillColor = Color3.fromRGB(255, 120, 80)
+	highlight.OutlineColor = Color3.fromRGB(255,255,255)
+	highlight.Enabled = espEnabled
+	highlight.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+	-- BillboardGui
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "LocalESP_Billboard"
+	billboard.Adornee = head
+	billboard.AlwaysOnTop = true
+	billboard.Size = UDim2.new(0, 180, 0, 36)
+	billboard.StudsOffset = Vector3.new(0, 2.4, 0)
+	billboard.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1,0,1,0)
+	label.BackgroundTransparency = 1
+	label.TextScaled = true
+	label.Font = Enum.Font.SourceSansBold
+	label.TextColor3 = Color3.fromRGB(255,255,255)
+	label.TextStrokeTransparency = 0.6
+	label.Text = displayName or sourceName
+	label.Parent = billboard
+
+	tracked[key] = {
+		char = char,
+		humanoid = humanoid,
+		head = head,
+		highlight = highlight,
+		billboard = billboard,
+		label = label,
+		sourceName = sourceName,
+	}
+end
+
+local function cleanupESPForCharacter(char)
+	local key = char
+	local entry = tracked[key]
+	if not entry then return end
+	if entry.highlight and entry.highlight.Parent then entry.highlight:Destroy() end
+	if entry.billboard and entry.billboard.Parent then entry.billboard:Destroy() end
+	tracked[key] = nil
+end
+
+local function getNPCCharacters()
+	local npcs = {}
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+			if not Players:GetPlayerFromCharacter(obj) then
+				table.insert(npcs, obj)
+			end
+		end
+	end
+	return npcs
+end
+
+local function findBestNPCTarget()
+	local camCFrame = Camera.CFrame
+	local camPos = camCFrame.Position
+	local camLook = camCFrame.LookVector
+
+	local best = nil
+	local bestScore = math.huge
+	for _, npc in ipairs(getNPCCharacters()) do
+		if npc and npc.PrimaryPart then
+			local head = npc:FindFirstChild("Head") or npc.PrimaryPart
+			local pos = head.Position
+			local dir = (pos - camPos)
+			local dist = dir.Magnitude
+			if dist <= ASSIST_RANGE then
+				local dirUnit = dir.Unit
+				local dot = math.clamp(camLook:Dot(dirUnit), -1, 1)
+				local angle = math.deg(math.acos(dot))
+				if angle <= ASSIST_MAX_ANGLE then
+					local score = angle + (dist/100)
+					if score < bestScore then
+						bestScore = score
+						best = {npc = npc, pos = pos, angle = angle, dist = dist}
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+local function allowAimAssist()
+	local count = 0
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p and p.Character and p ~= LocalPlayer then
+			count = count + 1
+		end
+	end
+	return count <= 0
+end
+
+local function assistCameraTowards(targetPos, dt)
+	local camPos = Camera.CFrame.Position
+	local desired = CFrame.new(camPos, targetPos)
+	local current = Camera.CFrame
+	local newCFrame = current:Lerp(desired, math.clamp(ASSIST_STRENGTH * (dt*60), 0, 1))
+	Camera.CameraType = Enum.CameraType.Scriptable
+	Camera.CFrame = newCFrame
+end
+
+local function restoreCameraControl()
+	if Camera.CameraType == Enum.CameraType.Scriptable then
+		Camera.CameraType = Enum.CameraType.Custom
+	end
+end
+
+-- ============ CORE LOOPS =============
+
+spawn(function()
+	while true do
+		-- players
+		for _, p in ipairs(Players:GetPlayers()) do
+			local char = p.Character
+			if char and char.Parent then
+				if p ~= LocalPlayer then
+					if SHOW_TEAMMATES == false and p.Team and LocalPlayer.Team and p.Team == LocalPlayer.Team then
+						cleanupESPForCharacter(char)
+					else
+						local hum = char:FindFirstChildOfClass("Humanoid")
+						local hpText = ""
+						if hum then
+							local h = math.max(0, math.floor(hum.Health + 0.5))
+							local mh = math.max(1, math.floor(hum.MaxHealth + 0.5))
+							hpText = string.format(" | %d/%d HP", h, mh)
+						end
+						createOrUpdateESPForCharacter(p.Name, char, p.Name .. hpText)
+					end
+				end
+			else
+				if char then cleanupESPForCharacter(char) end
+			end
+		end
+
+		-- NPCs
+		for _, npc in ipairs(getNPCCharacters()) do
+			createOrUpdateESPForCharacter("NPC", npc, (npc.Name or "NPC"))
+		end
+
+		-- cleanup
+		for key, entry in pairs(tracked) do
+			if not entry.char or not entry.char.Parent then
+				cleanupESPForCharacter(key)
+			end
+		end
+
+		wait(ESP_UPDATE_INTERVAL)
+	end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+	if not aimEnabled then
+		restoreCameraControl()
+		return
+	end
+
+	if not allowAimAssist() then
+		aimEnabled = false
+		restoreCameraControl()
+		warn("Aim-assist refused: other players detected. Aim-assist only allowed in single-player testing.")
+		return
+	end
+
+	local tgt = findBestNPCTarget()
+	if tgt and tgt.pos then
+		assistCameraTowards(tgt.pos, dt)
+	else
+		restoreCameraControl()
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.UserInputType == Enum.UserInputType.Keyboard then
+		if input.KeyCode == TOGGLE_ESP_KEY then
+			espEnabled = not espEnabled
+			for _, entry in pairs(tracked) do
+				if entry.highlight then entry.highlight.Enabled = espEnabled end
+				if entry.billboard then entry.billboard.Enabled = espEnabled end
+			end
+			print("ESP " .. (espEnabled and "ENABLED" or "DISABLED"))
+		elseif input.KeyCode == TOGGLE_AIM_KEY then
+			if not aimEnabled then
+				if allowAimAssist() then
+					aimEnabled = true
+					print("Aim-assist ENABLED (single-player mode)")
+				else
+					aimEnabled = false
+					warn("Cannot enable aim-assist: other players detected. Use this only in single-player testing maps.")
+				end
+			else
+				aimEnabled = false
+				restoreCameraControl()
+				print("Aim-assist DISABLED")
+			end
+		end
+	end
+end)
+
+LocalPlayer.AncestryChanged:Connect(function()
+	if not LocalPlayer:IsDescendantOf(game) then
+		restoreCameraControl()
+		for k, _ in pairs(tracked) do cleanupESPForCharacter(k) end
+	end
+end)
