@@ -1,15 +1,9 @@
--- Rayfield_LocalMovement.lua
--- Client-only: WalkSpeed, JumpPower, Fly, Noclip using Rayfield UI
--- Place in StarterPlayerScripts (LocalScript) OR load via loadstring from GitHub.
+-- LocalScript: StarterPlayer -> StarterPlayerScripts
+-- Client-only movement GUI: WalkSpeed, JumpPower, Fly, Noclip
+-- Requires Rayfield
 
 -- Load Rayfield
-local ok, Rayfield = pcall(function()
-	return loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
-end)
-if not ok or not Rayfield then
-	warn("Failed to load Rayfield. Check internet or URL.")
-	return
-end
+local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -17,45 +11,37 @@ local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local Humanoid = nil
-local RootPart = nil
+local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+local RootPart = Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart
 
-local function refreshCharacterRefs()
+-- Refresh character references on respawn
+local function refreshChar()
     Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     Humanoid = Character:FindFirstChildOfClass("Humanoid")
     RootPart = Character:FindFirstChild("HumanoidRootPart") or Character.PrimaryPart
 end
-refreshCharacterRefs()
-LocalPlayer.CharacterAdded:Connect(function()
-    wait(0.1)
-    refreshCharacterRefs()
-end)
 
--- Default values
-local DEFAULT_WALKSPEED = 16
-local DEFAULT_JUMPPOWER = 50
-local DEFAULT_FLYSPEED = 50
+LocalPlayer.CharacterAdded:Connect(refreshChar)
 
 -- State
 local state = {
-    walkSpeed = Humanoid and Humanoid.WalkSpeed or DEFAULT_WALKSPEED,
-    jumpPower = Humanoid and Humanoid.JumpPower or DEFAULT_JUMPPOWER,
-    flySpeed = DEFAULT_FLYSPEED,
+    walkSpeed = Humanoid and Humanoid.WalkSpeed or 16,
+    jumpPower = Humanoid and Humanoid.JumpPower or 50,
+    flySpeed = 50,
     flying = false,
     noclip = false,
 }
 
--- Fly internals
-local bodyVelocity, bodyGyro = nil, nil
+local bodyVelocity, bodyGyro
 
 local function enableFly()
     if state.flying then return end
-    refreshCharacterRefs()
+    refreshChar()
     if not RootPart or not Humanoid then return end
     Humanoid.PlatformStand = true
 
     bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+    bodyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
     bodyVelocity.P = 1250
     bodyVelocity.Velocity = Vector3.new(0,0,0)
     bodyVelocity.Parent = RootPart
@@ -71,178 +57,100 @@ end
 
 local function disableFly()
     if not state.flying then return end
-    if bodyVelocity then
-        bodyVelocity:Destroy()
-        bodyVelocity = nil
-    end
-    if bodyGyro then
-        bodyGyro:Destroy()
-        bodyGyro = nil
-    end
-    if Humanoid then
-        -- restore platform stand off so normal physics resume
-        pcall(function() Humanoid.PlatformStand = false end)
-    end
-    state.flying = false
+    if bodyVelocity then bodyVelocity:Destroy() bodyVelocity=nil end
+    if bodyGyro then bodyGyro:Destroy() bodyGyro=nil end
+    if Humanoid then pcall(function() Humanoid.PlatformStand=false end) end
+    state.flying=false
 end
 
 local function setNoclip(enabled)
     state.noclip = enabled
-    -- immediate pass to ensure current parts update
     if enabled and Character then
-        for _, part in ipairs(Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
+        for _, p in ipairs(Character:GetDescendants()) do
+            if p:IsA("BasePart") then
+                p.CanCollide = false
             end
         end
     end
 end
 
--- Rayfield window
+-- ===================== Rayfield Window =====================
 local Window = Rayfield:CreateWindow({
-    Name = "Local Movement",
-    LoadingTitle = "LocalMovement",
-    LoadingSubtitle = "client-only",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "LocalMovementConfigs",
-        FileName = "default",
-    },
-    Discord = { Enabled = false },
-    KeySystem = false,
+    Name = "Movement GUI",
+    LoadingTitle = "Movement GUI Loaded",
+    LoadingSubtitle = "Client-only",
+    ConfigurationSaving = {Enabled = true, FolderName = "MovementConfigs", FileName = "Default"},
+    Discord = {Enabled=false},
+    KeySystem = false
 })
 
-local Tab = Window:CreateTab("Movement")
+local Tab = Window:CreateTab("Player Movement")
 
--- WalkSpeed slider
-local walkSlider = Tab:CreateSlider({
-    Name = "WalkSpeed",
-    Range = {16, 500},
-    Increment = 1,
-    Suffix = "ws",
-    CurrentValue = state.walkSpeed,
-    Flag = "WalkSpeed",
-    Callback = function(val)
-        state.walkSpeed = val
-        if Humanoid then
-            pcall(function() Humanoid.WalkSpeed = val end)
-        end
+-- WalkSpeed
+Tab:CreateSlider({
+    Name="WalkSpeed",
+    Range={16,500},
+    Increment=1,
+    Suffix=" ws",
+    CurrentValue=state.walkSpeed,
+    Flag="WalkSpeed",
+    Callback=function(val)
+        state.walkSpeed=val
+        if Humanoid then pcall(function() Humanoid.WalkSpeed=val end) end
     end
 })
 
--- JumpPower slider
-local jumpSlider = Tab:CreateSlider({
-    Name = "JumpPower",
-    Range = {0, 500},
-    Increment = 1,
-    Suffix = "jp",
-    CurrentValue = state.jumpPower,
-    Flag = "JumpPower",
-    Callback = function(val)
-        state.jumpPower = val
-        if Humanoid then
-            pcall(function() Humanoid.JumpPower = val end)
-        end
+-- JumpPower
+Tab:CreateSlider({
+    Name="JumpPower",
+    Range={0,500},
+    Increment=1,
+    Suffix=" jp",
+    CurrentValue=state.jumpPower,
+    Flag="JumpPower",
+    Callback=function(val)
+        state.jumpPower=val
+        if Humanoid then pcall(function() Humanoid.JumpPower=val end) end
     end
 })
 
--- Fly speed slider
-local flySlider = Tab:CreateSlider({
-    Name = "FlySpeed",
-    Range = {10, 300},
-    Increment = 1,
-    Suffix = "fs",
-    CurrentValue = state.flySpeed,
-    Flag = "FlySpeed",
-    Callback = function(val)
-        state.flySpeed = val
+-- Fly Speed
+Tab:CreateSlider({
+    Name="FlySpeed",
+    Range={10,300},
+    Increment=1,
+    Suffix=" fs",
+    CurrentValue=state.flySpeed,
+    Flag="FlySpeed",
+    Callback=function(val)
+        state.flySpeed=val
     end
 })
 
--- Fly toggle
-local flyToggle = Tab:CreateToggle({
-    Name = "Fly (client)",
-    CurrentValue = false,
-    Flag = "FlyToggle",
-    Callback = function(enabled)
-        if enabled then
-            enableFly()
-        else
-            disableFly()
-        end
+-- Fly Toggle
+Tab:CreateToggle({
+    Name="Fly",
+    CurrentValue=false,
+    Flag="FlyToggle",
+    Callback=function(enabled)
+        if enabled then enableFly() else disableFly() end
     end
 })
 
--- Noclip toggle
-local noclipToggle = Tab:CreateToggle({
-    Name = "Noclip (client)",
-    CurrentValue = false,
-    Flag = "NoclipToggle",
-    Callback = function(enabled)
+-- Noclip Toggle
+Tab:CreateToggle({
+    Name="Noclip",
+    CurrentValue=false,
+    Flag="NoclipToggle",
+    Callback=function(enabled)
         setNoclip(enabled)
     end
 })
 
--- Bind a hotkey to show/hide Rayfield (optional)
-Window:SetValue("ToggleKeybind", Enum.KeyCode.RightShift) -- visually appears in Rayfield if supported
+-- Optional: hotkey to show/hide GUI
+Window:SetValue("ToggleKeybind", Enum.KeyCode.RightShift)
 
--- Per-frame updates
-RunService.RenderStepped:Connect(function(dt)
-    -- keep Humanoid refs fresh (in case of respawn)
+-- ===================== Update loop =====================
+RunService.RenderStepped:Connect(function()
     if not Humanoid or not RootPart or not Character or not Character.Parent then
-        refreshCharacterRefs()
-    end
 
-    -- Enforce WalkSpeed/JumpPower each frame in case something else changes them
-    if Humanoid then
-        if Humanoid.WalkSpeed ~= state.walkSpeed then
-            pcall(function() Humanoid.WalkSpeed = state.walkSpeed end)
-        end
-        if Humanoid.JumpPower ~= state.jumpPower then
-            pcall(function() Humanoid.JumpPower = state.jumpPower end)
-        end
-    end
-
-    -- Flying movement
-    if state.flying and bodyVelocity and bodyGyro and RootPart then
-        local cam = workspace.CurrentCamera
-        local moveVec = Vector3.new(0,0,0)
-
-        -- support keyboard for desktop
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + cam.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + cam.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVec = moveVec + Vector3.new(0,1,0) end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveVec = moveVec - Vector3.new(0,1,0) end
-
-        -- On mobile, use camera forward as gentle upward drift when tapping top-left (Rayfield won't handle mobile input here)
-        -- Scale by flySpeed
-        if moveVec.Magnitude > 0 then
-            bodyVelocity.Velocity = moveVec.Unit * state.flySpeed
-            bodyGyro.CFrame = CFrame.new(RootPart.Position, RootPart.Position + moveVec)
-        else
-            bodyVelocity.Velocity = Vector3.new(0,0,0)
-        end
-    end
-
-    -- Noclip enforcement
-    if state.noclip and Character then
-        for _, part in ipairs(Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                if part.CanCollide ~= false then
-                    pcall(function() part.CanCollide = false end)
-                end
-            end
-        end
-    end
-end)
-
--- Ensure everything is cleaned up on character removal
-LocalPlayer.CharacterRemoving:Connect(function()
-    disableFly()
-    setNoclip(false)
-end)
-
--- Final print
-print("[Rayfield_LocalMovement] ready — client-only controls (walk, jump, fly, noclip)")
