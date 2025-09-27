@@ -1,33 +1,17 @@
--- LocalScript: StarterPlayer -> StarterPlayerScripts
-local RunService = game:GetService("RunService")
+-- Server-side Script: ServerScriptService
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 
--- ================= UNANCHOR ALL PARTS =================
-local function unanchorAllParts()
-	for _, obj in ipairs(Workspace:GetDescendants()) do
-		if obj:IsA("BasePart") then
-			obj.Anchored = false
-		end
-	end
-end
-
--- Run once immediately
-unanchorAllParts()
-
--- Optional: keep unanchoring new parts that spawn
-Workspace.DescendantAdded:Connect(function(obj)
+-- Unanchor all parts
+for _, obj in ipairs(Workspace:GetDescendants()) do
 	if obj:IsA("BasePart") then
 		obj.Anchored = false
 	end
-end)
+end
 
-print("All parts in the map are now unanchored!")
-
--- ================= CUSTOM SKY =================
+-- Change sky
 local sky = Instance.new("Sky")
 sky.Name = "CoolKidSky"
--- Example settings (you can replace with your preferred asset IDs)
 sky.SkyboxBk = "rbxassetid://6031074895"
 sky.SkyboxDn = "rbxassetid://6031074895"
 sky.SkyboxFt = "rbxassetid://6031074895"
@@ -35,5 +19,3 @@ sky.SkyboxLf = "rbxassetid://6031074895"
 sky.SkyboxRt = "rbxassetid://6031074895"
 sky.SkyboxUp = "rbxassetid://6031074895"
 sky.Parent = Lighting
-
-print("Sky changed to CoolKidSky!")
