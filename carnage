@@ -1,5 +1,7 @@
--- LocalMobileFeaturesGUI.lua
--- Local player only, GUI for mobile and desktop
+-- LocalMobileGUI.lua
+-- Client-only, mobile-friendly, movable GUI with sliders for WalkSpeed, JumpPower, FlySpeed
+-- Fly/Noclip toggle, Show/Hide GUI, smooth design
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -21,35 +23,54 @@ local screenGui = Instance.new("ScreenGui", PlayerGui)
 screenGui.Name = "LocalMobileFeaturesGUI"
 
 local frame = Instance.new("Frame", screenGui)
-frame.Size = UDim2.new(0, 240, 0, 220)
+frame.Size = UDim2.new(0, 260, 0, 250)
 frame.Position = UDim2.new(0,10,0,10)
 frame.BackgroundColor3 = Color3.fromRGB(28,28,28)
 frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
 
+local UIListLayout = Instance.new("UIListLayout", frame)
+UIListLayout.Padding = UDim.new(0,8)
+UIListLayout.FillDirection = Enum.FillDirection.Vertical
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- Show/Hide button (top-left)
 local toggleButton = Instance.new("TextButton", screenGui)
-toggleButton.Size = UDim2.new(0,100,0,32)
-toggleButton.Position = UDim2.new(0,10,0,240)
-toggleButton.Text = "Show/Hide"
+toggleButton.Size = UDim2.new(0,120,0,35)
+toggleButton.Position = UDim2.new(0,10,0,10)
+toggleButton.Text = "Show/Hide GUI"
 toggleButton.TextScaled = true
 toggleButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
+toggleButton.TextColor3 = Color3.new(1,1,1)
+toggleButton.ZIndex = 2
 
--- Function to create slider
-local function createSlider(name, y, min, max, default)
-	local label = Instance.new("TextLabel", frame)
-	label.Size = UDim2.new(0,220,0,20)
-	label.Position = UDim2.new(0,10,0,10+y*60)
+-- Function to create sliders
+local function createSlider(name, min, max, default)
+	local container = Instance.new("Frame", frame)
+	container.Size = UDim2.new(1,0,0,50)
+	container.BackgroundTransparency = 1
+	
+	local label = Instance.new("TextLabel", container)
+	label.Size = UDim2.new(1,0,0,20)
+	label.Position = UDim2.new(0,0,0,0)
+	label.BackgroundTransparency = 1
 	label.Text = name..": "..tostring(default)
 	label.TextScaled = true
-	label.BackgroundTransparency = 1
-	label.TextColor3 = Color3.fromRGB(255,255,255)
-
-	local slider = Instance.new("TextButton", frame)
-	slider.Size = UDim2.new(0,220,0,20)
-	slider.Position = UDim2.new(0,10,0,35+y*60)
+	label.TextColor3 = Color3.new(1,1,1)
+	label.Font = Enum.Font.SourceSansBold
+	
+	local slider = Instance.new("Frame", container)
+	slider.Size = UDim2.new(1,0,0,20)
+	slider.Position = UDim2.new(0,0,0,25)
 	slider.BackgroundColor3 = Color3.fromRGB(50,50,50)
-	slider.Text = ""
+	
+	local fill = Instance.new("Frame", slider)
+	fill.Size = UDim2.new(0, (default-min)/(max-min)*slider.AbsoluteSize.X,1,0)
+	fill.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	fill.ZIndex = 2
+	
 	local dragging = false
-
 	slider.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging = true
@@ -60,35 +81,34 @@ local function createSlider(name, y, min, max, default)
 			dragging = false
 		end
 	end)
-
+	
 	RunService.RenderStepped:Connect(function()
 		if dragging then
 			local mouse = UserInputService:GetMouseLocation()
 			local x = math.clamp(mouse.X - slider.AbsolutePosition.X,0,slider.AbsoluteSize.X)
 			local value = min + ((x/slider.AbsoluteSize.X)*(max-min))
 			label.Text = name..": "..string.format("%.1f",value)
+			fill.Size = UDim2.new(x/slider.AbsoluteSize.X,0,1,0)
 			if name=="WalkSpeed" then walkSpeed=value; Humanoid.WalkSpeed=value
 			elseif name=="JumpPower" then jumpPower=value; Humanoid.JumpPower=value
 			elseif name=="FlySpeed" then flySpeed=value end
 		end
 	end)
-
-	return slider
+	return container
 end
 
-local wsSlider = createSlider("WalkSpeed",0,16,500,walkSpeed)
-local jpSlider = createSlider("JumpPower",1,50,500,jumpPower)
-local fsSlider = createSlider("FlySpeed",2,10,200,flySpeed)
+local wsSlider = createSlider("WalkSpeed",16,500,walkSpeed)
+local jpSlider = createSlider("JumpPower",50,500,jumpPower)
+local fsSlider = createSlider("FlySpeed",10,200,flySpeed)
 
 -- Fly toggle button
 local flyBtn = Instance.new("TextButton", frame)
-flyBtn.Size = UDim2.new(0,220,0,30)
-flyBtn.Position = UDim2.new(0,10,0,200)
-flyBtn.Text = "Toggle Fly/Noclip"
+flyBtn.Size = UDim2.new(1,0,0,35)
+flyBtn.Text = "Toggle Fly / Noclip"
 flyBtn.TextScaled = true
 flyBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+flyBtn.TextColor3 = Color3.new(1,1,1)
 
--- Show/Hide GUI
 toggleButton.MouseButton1Click:Connect(function()
 	frame.Visible = not frame.Visible
 end)
