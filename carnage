@@ -1,0 +1,144 @@
+-- LocalFeatures.lua
+-- Local player only: WalkSpeed, JumpPower, Fly/Noclip, Give tools, Instant ProximityPrompt
+-- Place in StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- ========== CONFIG ==========
+local flySpeed = 60
+local walkSpeed = 16
+local jumpPower = 50
+
+-- GUI
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local screenGui = Instance.new("ScreenGui", PlayerGui)
+screenGui.Name = "LocalFeaturesGUI"
+
+local frame = Instance.new("Frame", screenGui)
+frame.Size = UDim2.new(0, 300, 0, 250)
+frame.Position = UDim2.new(0, 10, 0, 10)
+frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+
+local function newButton(name, y)
+	local btn = Instance.new("TextButton", frame)
+	btn.Size = UDim2.new(0.9,0,0,30)
+	btn.Position = UDim2.new(0.05,0,0,10 + (y*40))
+	btn.Text = name
+	btn.TextScaled = true
+	btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+	return btn
+end
+
+local flyBtn = newButton("Toggle Fly/Noclip",0)
+local speedBtn = newButton("Set WalkSpeed",1)
+local jumpBtn = newButton("Set JumpPower",2)
+local toolBtn = newButton("Give Tool",3)
+local proxBtn = newButton("Skip ProximityPrompt",4)
+
+-- ========== FUNCTIONS ==========
+local flying = false
+local bv, bg
+
+local function enableFly()
+	if flying then return end
+	bv = Instance.new("BodyVelocity")
+	bv.MaxForce = Vector3.new(1e5,1e5,1e5)
+	bv.Velocity = Vector3.new(0,0,0)
+	bv.Parent = RootPart
+
+	bg = Instance.new("BodyGyro")
+	bg.MaxTorque = Vector3.new(4e4,4e4,4e4)
+	bg.CFrame = RootPart.CFrame
+	bg.Parent = RootPart
+
+	flying = true
+end
+
+local function disableFly()
+	if bv then bv:Destroy() end
+	if bg then bg:Destroy() end
+	flying = false
+end
+
+local function toggleFly()
+	if flying then disableFly() else enableFly() end
+end
+
+local function setSpeed()
+	local input = tonumber(tostring(LocalPlayer:PromptInput("WalkSpeed:", tostring(walkSpeed))))
+	if input then
+		walkSpeed = input
+		if Humanoid then Humanoid.WalkSpeed = walkSpeed end
+	end
+end
+
+local function setJump()
+	local input = tonumber(tostring(LocalPlayer:PromptInput("JumpPower:", tostring(jumpPower))))
+	if input then
+		jumpPower = input
+		if Humanoid then Humanoid.JumpPower = jumpPower end
+	end
+end
+
+local function giveTool()
+	local toolName = tostring(LocalPlayer:PromptInput("Tool Name:", ""))
+	if toolName and toolName ~= "" then
+		local tool = ReplicatedStorage:FindFirstChild(toolName)
+		if tool then
+			tool:Clone().Parent = LocalPlayer.Backpack
+		end
+	end
+end
+
+local function skipProx()
+	for _,prompt in ipairs(workspace:GetDescendants()) do
+		if prompt:IsA("ProximityPrompt") then
+			prompt.HoldDuration = 0
+		end
+	end
+end
+
+-- ========== BUTTON EVENTS ==========
+flyBtn.MouseButton1Click:Connect(toggleFly)
+speedBtn.MouseButton1Click:Connect(setSpeed)
+jumpBtn.MouseButton1Click:Connect(setJump)
+toolBtn.MouseButton1Click:Connect(giveTool)
+proxBtn.MouseButton1Click:Connect(skipProx)
+
+-- ========== FLY LOOP ==========
+RunService.RenderStepped:Connect(function(dt)
+	if flying then
+		local cam = workspace.CurrentCamera
+		local dir = Vector3.new()
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0,1,0) end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir = dir - Vector3.new(0,1,0) end
+		if dir.Magnitude > 0 then
+			bv.Velocity = dir.Unit * flySpeed
+			bg.CFrame = CFrame.new(RootPart.Position, RootPart.Position + dir)
+		else
+			bv.Velocity = Vector3.new(0,0,0)
+		end
+	end
+end)
+
+-- ========== NOCLIP ==========
+RunService.Stepped:Connect(function()
+	if flying then
+		for _, part in ipairs(Character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
+end)
