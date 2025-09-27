@@ -1,175 +1,145 @@
--- MobileFeatures.lua
--- Local player only: WalkSpeed, JumpPower, FlySpeed sliders + Fly/Noclip + Show/Hide GUI
--- Place in StarterPlayerScripts
-
+-- LocalMobileFeaturesGUI.lua
+-- Local player only, GUI for mobile and desktop
 local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
 local RootPart = Character:WaitForChild("HumanoidRootPart")
 
--- ==================== SETTINGS ====================
-local flyEnabled = false
+-- ===== STATE =====
+local walkSpeed = Humanoid.WalkSpeed
+local jumpPower = Humanoid.JumpPower
 local flySpeed = 50
-local walkSpeed = 16
-local jumpPower = 50
-
--- ==================== GUI ====================
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-
-local screenGui = Instance.new("ScreenGui", PlayerGui)
-screenGui.Name = "MobileFeaturesGUI"
-
--- Frame
-local frame = Instance.new("Frame", screenGui)
-frame.Size = UDim2.new(0, 220, 0, 280)
-frame.Position = UDim2.new(0,10,0,10)
-frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-frame.BackgroundTransparency = 0.5
-frame.Visible = false
-
--- Show/Hide buttons
-local showBtn = Instance.new("TextButton", PlayerGui)
-showBtn.Size = UDim2.new(0, 100, 0, 40)
-showBtn.Position = UDim2.new(0,10,0,300)
-showBtn.Text = "Show GUI"
-
-local hideBtn = Instance.new("TextButton", frame)
-hideBtn.Size = UDim2.new(0, 60, 0, 30)
-hideBtn.Position = UDim2.new(1, -70, 0, 5)
-hideBtn.Text = "Close"
-
-showBtn.MouseButton1Click:Connect(function()
-    frame.Visible = true
-end)
-hideBtn.MouseButton1Click:Connect(function()
-    frame.Visible = false
-end)
-
--- Fly Button
-local flyBtn = Instance.new("TextButton", frame)
-flyBtn.Size = UDim2.new(0, 200, 0, 35)
-flyBtn.Position = UDim2.new(0,10,0,40)
-flyBtn.Text = "Toggle Fly/Noclip"
-
--- Sliders helper
-local function newSlider(yPos, labelText, min, max, default)
-    local lbl = Instance.new("TextLabel", frame)
-    lbl.Size = UDim2.new(0, 200, 0, 25)
-    lbl.Position = UDim2.new(0,10,0,yPos)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = labelText..": "..tostring(default)
-    lbl.TextColor3 = Color3.fromRGB(255,255,255)
-    lbl.TextScaled = true
-
-    local slider = Instance.new("TextBox", frame)
-    slider.Size = UDim2.new(0,200,0,30)
-    slider.Position = UDim2.new(0,10,0,yPos+25)
-    slider.Text = tostring(default)
-    slider.TextScaled = true
-
-    return lbl, slider
-end
-
--- Sliders
-local walkLbl, walkSlider = newSlider(90, "WalkSpeed", 0, 500, walkSpeed)
-local jumpLbl, jumpSlider = newSlider(150, "JumpPower", 0, 500, jumpPower)
-local flyLbl, flySlider = newSlider(210, "FlySpeed", 0, 500, flySpeed)
-
--- ========== FUNCTIONS ==========
-
--- Fly / Noclip
+local flying = false
 local bv, bg
 
+-- ===== GUI =====
+local screenGui = Instance.new("ScreenGui", PlayerGui)
+screenGui.Name = "LocalMobileFeaturesGUI"
+
+local frame = Instance.new("Frame", screenGui)
+frame.Size = UDim2.new(0, 240, 0, 220)
+frame.Position = UDim2.new(0,10,0,10)
+frame.BackgroundColor3 = Color3.fromRGB(28,28,28)
+frame.BorderSizePixel = 0
+
+local toggleButton = Instance.new("TextButton", screenGui)
+toggleButton.Size = UDim2.new(0,100,0,32)
+toggleButton.Position = UDim2.new(0,10,0,240)
+toggleButton.Text = "Show/Hide"
+toggleButton.TextScaled = true
+toggleButton.BackgroundColor3 = Color3.fromRGB(50,50,50)
+
+-- Function to create slider
+local function createSlider(name, y, min, max, default)
+	local label = Instance.new("TextLabel", frame)
+	label.Size = UDim2.new(0,220,0,20)
+	label.Position = UDim2.new(0,10,0,10+y*60)
+	label.Text = name..": "..tostring(default)
+	label.TextScaled = true
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(255,255,255)
+
+	local slider = Instance.new("TextButton", frame)
+	slider.Size = UDim2.new(0,220,0,20)
+	slider.Position = UDim2.new(0,10,0,35+y*60)
+	slider.BackgroundColor3 = Color3.fromRGB(50,50,50)
+	slider.Text = ""
+	local dragging = false
+
+	slider.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+		end
+	end)
+	slider.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+
+	RunService.RenderStepped:Connect(function()
+		if dragging then
+			local mouse = UserInputService:GetMouseLocation()
+			local x = math.clamp(mouse.X - slider.AbsolutePosition.X,0,slider.AbsoluteSize.X)
+			local value = min + ((x/slider.AbsoluteSize.X)*(max-min))
+			label.Text = name..": "..string.format("%.1f",value)
+			if name=="WalkSpeed" then walkSpeed=value; Humanoid.WalkSpeed=value
+			elseif name=="JumpPower" then jumpPower=value; Humanoid.JumpPower=value
+			elseif name=="FlySpeed" then flySpeed=value end
+		end
+	end)
+
+	return slider
+end
+
+local wsSlider = createSlider("WalkSpeed",0,16,500,walkSpeed)
+local jpSlider = createSlider("JumpPower",1,50,500,jumpPower)
+local fsSlider = createSlider("FlySpeed",2,10,200,flySpeed)
+
+-- Fly toggle button
+local flyBtn = Instance.new("TextButton", frame)
+flyBtn.Size = UDim2.new(0,220,0,30)
+flyBtn.Position = UDim2.new(0,10,0,200)
+flyBtn.Text = "Toggle Fly/Noclip"
+flyBtn.TextScaled = true
+flyBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+
+-- Show/Hide GUI
+toggleButton.MouseButton1Click:Connect(function()
+	frame.Visible = not frame.Visible
+end)
+
+-- ===== FLY/NOCOL LOOP =====
 local function enableFly()
-    if flyEnabled then return end
-    bv = Instance.new("BodyVelocity")
-    bv.MaxForce = Vector3.new(1e5,1e5,1e5)
-    bv.Velocity = Vector3.new(0,0,0)
-    bv.Parent = RootPart
+	if flying then return end
+	bv = Instance.new("BodyVelocity")
+	bv.MaxForce = Vector3.new(1e5,1e5,1e5)
+	bv.Velocity = Vector3.new(0,0,0)
+	bv.Parent = RootPart
 
-    bg = Instance.new("BodyGyro")
-    bg.MaxTorque = Vector3.new(1e5,1e5,1e5)
-    bg.CFrame = RootPart.CFrame
-    bg.Parent = RootPart
+	bg = Instance.new("BodyGyro")
+	bg.MaxTorque = Vector3.new(4e4,4e4,4e4)
+	bg.CFrame = RootPart.CFrame
+	bg.Parent = RootPart
 
-    flyEnabled = true
+	flying = true
 end
 
 local function disableFly()
-    if bv then bv:Destroy() end
-    if bg then bg:Destroy() end
-    flyEnabled = false
+	if bv then bv:Destroy() end
+	if bg then bg:Destroy() end
+	flying = false
 end
 
-local function toggleFly()
-    if flyEnabled then disableFly() else enableFly() end
-end
-
-flyBtn.MouseButton1Click:Connect(toggleFly)
-
--- Update Humanoid
-local function updateWalkSpeed()
-    local val = tonumber(walkSlider.Text)
-    if val then
-        walkSpeed = val
-        if Humanoid then Humanoid.WalkSpeed = walkSpeed end
-        walkLbl.Text = "WalkSpeed: "..walkSpeed
-    end
-end
-
-local function updateJumpPower()
-    local val = tonumber(jumpSlider.Text)
-    if val then
-        jumpPower = val
-        if Humanoid then Humanoid.JumpPower = jumpPower end
-        jumpLbl.Text = "JumpPower: "..jumpPower
-    end
-end
-
-local function updateFlySpeed()
-    local val = tonumber(flySlider.Text)
-    if val then
-        flySpeed = val
-        flyLbl.Text = "FlySpeed: "..flySpeed
-    end
-end
-
-walkSlider.FocusLost:Connect(updateWalkSpeed)
-jumpSlider.FocusLost:Connect(updateJumpPower)
-flySlider.FocusLost:Connect(updateFlySpeed)
-
--- Fly movement loop
-RunService.RenderStepped:Connect(function()
-    if flyEnabled then
-        local dir = Vector3.new()
-        local cam = workspace.CurrentCamera
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0,1,0) end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir = dir - Vector3.new(0,1,0) end
-
-        if dir.Magnitude > 0 then
-            bv.Velocity = dir.Unit * flySpeed
-            bg.CFrame = CFrame.new(RootPart.Position, RootPart.Position + dir)
-        else
-            bv.Velocity = Vector3.new(0,0,0)
-        end
-    end
+flyBtn.MouseButton1Click:Connect(function()
+	if flying then disableFly() else enableFly() end
 end)
 
--- Noclip for local player
-RunService.Stepped:Connect(function()
-    if flyEnabled then
-        for _, part in ipairs(Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
+-- Fly movement & noclip
+RunService.RenderStepped:Connect(function()
+	if flying then
+		local cam = workspace.CurrentCamera
+		local dir = Vector3.new()
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0,1,0) end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir = dir - Vector3.new(0,1,0) end
+		if dir.Magnitude > 0 then
+			bv.Velocity = dir.Unit * flySpeed
+			bg.CFrame = CFrame.new(RootPart.Position, RootPart.Position + dir)
+		else
+			bv.Velocity = Vector3.new(0,0,0)
+		end
+		for _, part in ipairs(Character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
 end)
