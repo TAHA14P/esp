@@ -1,0 +1,64 @@
+-- LocalScript: StarterPlayer -> StarterPlayerScripts
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+
+-- GUI setup
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TeleportGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 200, 0, 300)
+Frame.Position = UDim2.new(0, 10, 0.5, -150)
+Frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Frame.BorderSizePixel = 0
+Frame.Parent = ScreenGui
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Padding = UDim.new(0,5)
+UIListLayout.Parent = Frame
+
+-- Function to create a button for each player
+local function createPlayerButton(player)
+	if player == LocalPlayer then return end
+	
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.new(1, -10, 0, 30)
+	button.BackgroundColor3 = Color3.fromRGB(70,70,70)
+	button.TextColor3 = Color3.fromRGB(255,255,255)
+	button.TextScaled = true
+	button.Text = player.Name
+	button.Parent = Frame
+	
+	button.MouseButton1Click:Connect(function()
+		local character = LocalPlayer.Character
+		local targetChar = player.Character
+		if character and character:FindFirstChild("HumanoidRootPart") and targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
+			local hrp = character.HumanoidRootPart
+			local targetHRP = targetChar.HumanoidRootPart
+			-- Smooth teleport
+			local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			local goal = {CFrame = targetHRP.CFrame + Vector3.new(0,3,0)}
+			TweenService:Create(hrp, tweenInfo, goal):Play()
+		end
+	end)
+end
+
+-- Populate buttons
+local function refreshButtons()
+	-- Clear old buttons
+	for _, child in ipairs(Frame:GetChildren()) do
+		if child:IsA("TextButton") then child:Destroy() end
+	end
+	
+	for _, player in ipairs(Players:GetPlayers()) do
+		createPlayerButton(player)
+	end
+end
+
+-- Refresh whenever players join/leave
+Players.PlayerAdded:Connect(refreshButtons)
+Players.PlayerRemoving:Connect(refreshButtons)
+refreshButtons()
