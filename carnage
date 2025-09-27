@@ -1,17 +1,17 @@
--- LocalFeatures.lua
--- Local player only: WalkSpeed, JumpPower, Fly/Noclip, Give tools, Instant ProximityPrompt
--- Place in StarterPlayerScripts
+-- LocalFeatures_Mobile.lua
+-- Local player only, mobile-friendly small GUI
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
 local RootPart = Character:WaitForChild("HumanoidRootPart")
 
--- ========== CONFIG ==========
+-- CONFIG
 local flySpeed = 60
 local walkSpeed = 16
 local jumpPower = 50
@@ -19,30 +19,34 @@ local jumpPower = 50
 -- GUI
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local screenGui = Instance.new("ScreenGui", PlayerGui)
-screenGui.Name = "LocalFeaturesGUI"
+screenGui.Name = "MobileFeaturesGUI"
 
 local frame = Instance.new("Frame", screenGui)
-frame.Size = UDim2.new(0, 300, 0, 250)
+frame.Size = UDim2.new(0, 140, 0, 220)
 frame.Position = UDim2.new(0, 10, 0, 10)
-frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+frame.BackgroundColor3 = Color3.fromRGB(28,28,28)
+frame.BorderSizePixel = 1
+frame.BorderColor3 = Color3.fromRGB(255,255,255)
 
 local function newButton(name, y)
 	local btn = Instance.new("TextButton", frame)
-	btn.Size = UDim2.new(0.9,0,0,30)
-	btn.Position = UDim2.new(0.05,0,0,10 + (y*40))
+	btn.Size = UDim2.new(0.9,0,0,32)
+	btn.Position = UDim2.new(0.05,0,0,5 + (y*37))
 	btn.Text = name
 	btn.TextScaled = true
 	btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+	btn.TextColor3 = Color3.fromRGB(255,255,255)
+	btn.AutoButtonColor = true
 	return btn
 end
 
-local flyBtn = newButton("Toggle Fly/Noclip",0)
-local speedBtn = newButton("Set WalkSpeed",1)
-local jumpBtn = newButton("Set JumpPower",2)
+local flyBtn = newButton("Fly/Noclip",0)
+local speedBtn = newButton("WalkSpeed",1)
+local jumpBtn = newButton("JumpPower",2)
 local toolBtn = newButton("Give Tool",3)
-local proxBtn = newButton("Skip ProximityPrompt",4)
+local proxBtn = newButton("Skip Prox",4)
 
--- ========== FUNCTIONS ==========
+-- FUNCTIONS
 local flying = false
 local bv, bg
 
@@ -105,15 +109,15 @@ local function skipProx()
 	end
 end
 
--- ========== BUTTON EVENTS ==========
+-- BUTTON EVENTS
 flyBtn.MouseButton1Click:Connect(toggleFly)
 speedBtn.MouseButton1Click:Connect(setSpeed)
 jumpBtn.MouseButton1Click:Connect(setJump)
 toolBtn.MouseButton1Click:Connect(giveTool)
 proxBtn.MouseButton1Click:Connect(skipProx)
 
--- ========== FLY LOOP ==========
-RunService.RenderStepped:Connect(function(dt)
+-- FLY LOOP
+RunService.RenderStepped:Connect(function()
 	if flying then
 		local cam = workspace.CurrentCamera
 		local dir = Vector3.new()
@@ -132,7 +136,7 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 end)
 
--- ========== NOCLIP ==========
+-- NOCLIP
 RunService.Stepped:Connect(function()
 	if flying then
 		for _, part in ipairs(Character:GetDescendants()) do
